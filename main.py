@@ -119,7 +119,7 @@ class ApecsListener():
     def run(self):
         self.operating_parameters["state"] = "ENABLED"
         if self.operating_parameters["usechopper"] == "1":
-            filenum = self.obsengine.scan_num + self.operating_parameters["scan_offset"]
+            filenum = int(self.obsengine.scan_num) + int(self.operating_parameters["scan_offset"])
             self.zeus.take_data(f"skychop_{filenum}_{{num}}")
         else:
             self.zeus.take_data(f"apecs_{self.obsengine.scan_num}_{{num}}")
