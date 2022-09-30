@@ -263,10 +263,11 @@ chop_freq  : 1/(2*sync_time)""")
         return mcer
 
     def _auto_setup(self):
-        subprocess.Popen([
+        a = subprocess.Popen([
             "auto_setup"],
             stdout=subprocess.PIPE
         )
+        print(a.communicate()[0].decode())
         if self.do_sync:
             self.mce.write("cc", "use_sync", 2)
             self.mce.write("cc", "use_dv", 2)
