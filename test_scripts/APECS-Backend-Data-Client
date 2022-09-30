@@ -1,0 +1,117 @@
+#!/usr/bin/env python
+
+# APEX - Atacama Pathfinder EXperiment Project
+#
+# Copyright (C) 2006-2019
+# Max-Planck-Institut fuer Radioastronomie, Bonn, Germany
+#
+# Internet email: dmuders@mpifr-bonn.mpg.de
+
+'''Simple TCP client to receive and analyze data sent in APEX backend binary
+format as defined in APEX-MPI-IFD-0005.'''
+
+import sys
+import socket
+import struct
+import time
+
+def receiveBytes(socket, nBytes):
+    '''
+    Receive nBytes bytes via TCP connection:
+    '''
+    data = ''
+    # The data might be transmitted in chunks:
+    while len(data) < nBytes:
+        try:
+            recData = socket.recv(nBytes-len(data))
+        except socket.error, errdata:
+            if errdata[0]==9: # 'Bad file descriptor'
+                # No error but result of shutdown
+                data = ''
+                break
+            else:
+                raise
+        except:
+            raise
+
+        if recData:
+            data += recData
+
+    return data
+
+def receivePackage(socket):
+
+    header = receiveBytes(socket, 64)
+    encodingStandard = struct.unpack('4s', header[:4])[0]
+    if (encodingStandard == 'IEEE'):
+        # big endian
+        unpackStringEncoding = '>'
+    elif (encodingStandard == 'EEEI'):
+        # little endian
+        unpackStringEncoding = '<'
+    else:
+        raise Exception, 'Unknown encoding %s.' % (encodingStandard)
+
+    headerUnpackString = '%s4s1s3sl8s24s3s1sllll' % (unpackStringEncoding)
+
+
+    if not header:
+        # Shutdown happened:
+        return
+
+    # Analyze header and print it
+    headerTuple = struct.unpack(headerUnpackString, header)
+    print 'Encoding: %s Backend data format: %s' % \
+        (headerTuple[0], headerTuple[1])
+    print 'Total package length: %d bytes' % (headerTuple[3])
+    print 'Backend identifier: %s' % (headerTuple[4])
+    print 'Time stamp of first package: %s Time system: %s' % \
+        (headerTuple[5], headerTuple[6])
+    print 'Integration time: %d ms' % (headerTuple[8]/1000.0)
+    print 'Phase number: %d. Number of sections: %d. Blocking: %d.' % \
+        (headerTuple[9], headerTuple[10], headerTuple[11])
+
+    # Receive backend data
+    data = receiveBytes(socket, headerTuple[3]-64)
+
+    if not data:
+        # Shutdown happened:
+        return
+
+    if (headerTuple[1] == 'I'):
+        dataFormat = 'l'
+    elif (headerTuple[1] == 'F'):
+        dataFormat = 'f'
+    else:
+        print 'Unknown data format %s.' % (headerTuple[1])
+        return
+
+    dataPointer = 0
+    numBESections = headerTuple[10]
+    for BESecIndex in xrange(numBESections):
+        # Unpack the BESecNumber and numChannels for this BESection:
+        sectionNumber, channels = struct.unpack('%sll' % (unpackStringEncoding), data[dataPointer:dataPointer+8])
+        dataPointer += 8
+
+        # Unpack the section data:
+        spectrum = struct.unpack(unpackStringEncoding + channels * dataFormat, data[dataPointer:dataPointer+4*channels])
+        dataPointer += (channels*4)
+        print '%.5f ' % (spectrum[0]),
+    print
+    print
+
+
+if (len(sys.argv) != 3):
+    print 'Usage: %s <host> <port>' % (sys.argv[0])
+    sys.exit(0)
+while True:
+    try:
+        host = sys.argv[1]
+        port = int(sys.argv[2])
+        socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        socket.connect((host, port))
+
+        while True:
+            receivePackage(socket)
+    except:
+        time.sleep(10)
