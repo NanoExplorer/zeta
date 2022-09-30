@@ -26,6 +26,7 @@ class ZeusHardwareManager(threading.Thread):
         # acquire this lock if you want to talk to the hardware!
         # it's not recommended, but you can do it.
         self.apecs_callback=None
+        self.apecs_address = None
         # Hardware objects
         self.arduino = None
         self.chopper = None
@@ -38,7 +39,6 @@ class ZeusHardwareManager(threading.Thread):
         self.q = Queue()
 
         # Acquisition parameters
-        self.keep_going = True
         self.use_chopper = False
         self.integration_time = 0  # ms time mce_run should integrate for
         self.sync_time = 0  # us; time for one chopper phase = 1/2f
@@ -49,6 +49,11 @@ class ZeusHardwareManager(threading.Thread):
         self.reads_per_phase = 0
         self.beams_since_last_configure = 0
         self.want_grating_index = 0
+
+        self.scan_num = 0
+        self.keep_going = True
+        self.send_addr = ("10.0.2.171",33133)
+
 
     def configure_grating(self,idx):
         if self.grating.idx == idx:
@@ -76,7 +81,7 @@ class ZeusHardwareManager(threading.Thread):
            self.blank_time == blank_time and \
            self.use_chopper == use_chopper and\
            self.do_sync:
-            self.apecs_callback("APEX:ZEUS2BE:","configure")
+            self.apecs_callback(self.apecs_socket,self.apecs_address,"APEX:ZEUS2BE:","configure")
         else:
             self.integration_time = integration_time
             self.sync_time = sync_time
@@ -96,6 +101,7 @@ class ZeusHardwareManager(threading.Thread):
 
     def run(self):
         print("Setting Up Equipment!")
+        self.apecs_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.arduino = syncuino.Syncuino()
         self.syncbox = syncbox.Syncbox()
         self.mce = mce_control()
@@ -140,7 +146,7 @@ class ZeusHardwareManager(threading.Thread):
             # start watching the clock card for time stamps
             # to write into .ts file 
             zframetimes = self._open_frametimes(f)
-        self.apecs_callback("APEX:ZEUS2BE:","start")
+        self.apecs_callback(self.apecs_socket,self.apecs_address,"APEX:ZEUS2BE:","start")
         #start mce_run
         mce_run = self._mce_run(f)
 
@@ -255,10 +261,11 @@ chop_freq  : 1/(2*sync_time)""")
         return mcer
 
     def _auto_setup(self):
-        subprocess.Popen([
+        a = subprocess.Popen([
             "auto_setup"],
             stdout=subprocess.PIPE
         )
+        print(a.communicate()[0].decode())
         if self.do_sync:
             
             self.mce.write("cc", "use_sync", 2)
@@ -321,7 +328,7 @@ chop_freq  : 1/(2*sync_time)""")
         self.n_frames = round(total_reads)
         self.reads_per_phase = round(reads_per_phase)
         print("We Are Configured!")
-        self.apecs_callback("APEX:ZEUS2BE:","configure")
+        self.apecs_callback(self.apecs_socket,self.apecs_address,"APEX:ZEUS2BE:","configure")
 
 def make_filename(filename):
     if "{num}" in filename:
