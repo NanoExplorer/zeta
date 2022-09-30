@@ -51,9 +51,7 @@ class ZeusHardwareManager(threading.Thread):
         self.beams_since_last_configure = 0
         self.want_grating_index = 0
 
-        self.scan_num = 0
         self.keep_going = True
-        self.send_addr = ("10.0.2.171",33133)
 
 
     def configure_grating(self,idx):
