@@ -9,7 +9,6 @@ from mce_control import mce_control
 from glob import glob
 import subprocess
 import traceback
-import socket
 
 class ZeusHardwareManager(threading.Thread):
     """ High level interface for all the hardware interfaces for ZEUS-2.
@@ -50,12 +49,6 @@ class ZeusHardwareManager(threading.Thread):
         self.reads_per_phase = 0
         self.beams_since_last_configure = 0
         self.want_grating_index = 0
-
-        self.apecs_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.scan_num = 0
-        self.keep_going = True
-        self.q = Queue()
-        self.send_addr = ("10.0.2.171",33133)
 
     def configure_grating(self,idx):
         if self.grating.idx == idx:
@@ -267,6 +260,7 @@ chop_freq  : 1/(2*sync_time)""")
             stdout=subprocess.PIPE
         )
         if self.do_sync:
+            
             self.mce.write("cc", "use_sync", 2)
             self.mce.write("cc", "use_dv", 2)
             self.mce.write("cc", "select_clk", 1)
