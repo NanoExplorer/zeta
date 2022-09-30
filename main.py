@@ -5,13 +5,13 @@ import hardware
 import threading
 from queue import Queue, Empty
 
-def respond(self, context, value):
+def respond(sock, addr, context, value):
     time_utc = datetime.utcnow()
     time_tai = leapseconds.utc_to_tai(time_utc)
     time_iso = time_tai.isoformat()
     response = f"{context}{value} {time_iso}"
     print(f"Sending APECS: {response}")
-    self.apecs_socket.sendto(response.encode(), self.apecs_address)
+    sock.sendto(response.encode(), addr)
 
 class ApecsListener():
     #This controls everything
@@ -47,7 +47,7 @@ class ApecsListener():
         self.zeus.start()
         self.obsengine.start()
         self.obsengine.query_apecs_scan_num()
-        self.zeus.apecs_callback=self.respond
+        self.zeus.apecs_callback=respond
         while self.keep_going: 
             message, address = self.apecs_socket.recvfrom(1024)
             self.apecs_address = address
@@ -90,7 +90,8 @@ class ApecsListener():
 
     def execute(self, command):
         response = command
-        self.zeus.apecs_address = self.apecs_address
+        with self.zeus.hardware_lock:
+            self.zeus.apecs_address = self.apecs_address
         if command == "configure":
             self.do_configuration()
             return

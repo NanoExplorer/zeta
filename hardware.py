@@ -9,6 +9,7 @@ from mce_control import mce_control
 from glob import glob
 import subprocess
 import traceback
+import socket
 
 class ZeusHardwareManager(threading.Thread):
     """ High level interface for all the hardware interfaces for ZEUS-2.
