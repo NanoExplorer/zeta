@@ -72,7 +72,7 @@ class ApecsListener():
             return_val = self.execute(relevant_info.lower())
             return # execute does its own response
 
-        self.respond(self.apecs_socket,self.apecs_address,f"{parts[0]}:{parts[1]}:", return_val)
+        respond(self.apecs_socket,self.apecs_address,f"{parts[0]}:{parts[1]}:", return_val)
 
     def set_parameter(self, message):
         param, value = message.split(' ')
@@ -92,6 +92,7 @@ class ApecsListener():
 
     def execute(self, command):
         response = command
+        self.zeus.apecs_address = self.apecs_address
         if command == "configure":
             self.do_configuration()
             return
@@ -108,7 +109,7 @@ class ApecsListener():
             self.zeus.auto_setup()
         else:
             response = response + " ERROR NOT_IMPLEMENTED"
-        self.respond(self.apecs_socket,self.apecs_address,"APEX:ZEUS2BE:", response)
+        respond(self.apecs_socket,self.apecs_address,"APEX:ZEUS2BE:", response)
 
     def do_configuration(self):
         op = self.operating_parameters
