@@ -49,6 +49,7 @@ if __name__ == "__main__":
             cube = mcedata.data
             chop = mcedata.chop
             cube = np.ma.array(cube)
+            ts = np.genfromtxt(x+".ts")[:,1]
             try:
 
                 chops = zt.numba_reduction.offset_data_reduction(chop,cube)
@@ -64,6 +65,7 @@ if __name__ == "__main__":
             print(cube[am.phys_to_mce(30,0,400)])
             cube.fill_value=np.nan
             iplot = zt.plotting.ZeusInteractivePlotter(det_array,cube)
+            iplot.ts = ts
         if last_iplot is not None:
             #print(np.ma.array(det_array))
             # iplot.data = np.ma.array(det_array)
