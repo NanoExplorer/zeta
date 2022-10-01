@@ -97,7 +97,7 @@ def keep_reading_file(data_file, mce_px, callback):
     frames_sent = 0
     lines_sent = 0
     with open(data_file+".pf", 'w') as pf:
-        while frames_sent < nframes-1:
+        while frames_sent < nframes-5:
             print(frames_sent)
             d, chop, ts, frames_ready = read_as_much_as_possible(data_file)
             #print(d[1,1])

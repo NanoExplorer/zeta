@@ -11,6 +11,7 @@ import subprocess
 import traceback
 import socket
 
+
 class ZeusHardwareManager(threading.Thread):
     """ High level interface for all the hardware interfaces for ZEUS-2.
     This is a Thread, so you have to be a little bit careful with it.
@@ -50,9 +51,7 @@ class ZeusHardwareManager(threading.Thread):
         self.reads_per_phase = 0
         self.beams_since_last_configure = 0
         self.want_grating_index = 0
-
         self.keep_going = True
-
 
     def configure_grating(self,idx):
         if self.grating.idx == idx:
@@ -145,7 +144,7 @@ class ZeusHardwareManager(threading.Thread):
             # start watching the clock card for time stamps
             # to write into .ts file 
             zframetimes = self._open_frametimes(f)
-        self.apecs_callback(self.apecs_socket,self.apecs_address,"APEX:ZEUS2BE:","start")
+        #self.apecs_callback(self.apecs_socket,self.apecs_address,"APEX:ZEUS2BE:","start")
         #start mce_run
         mce_run = self._mce_run(f)
 
@@ -286,12 +285,14 @@ chop_freq  : 1/(2*sync_time)""")
 
     def _configure_hw_sync(self):
         print("Got configure")
+        if self.blank_time==0:
+            return self._configure_total_power(self)
         on_time_per_phase = self.sync_time - self.blank_time  # us
         num_phases = round(self.integration_time * 1000 / self.sync_time)
         readout_rate = float(self.mce.readout_rate()[0])
         reads_per_phase = round((on_time_per_phase * readout_rate) / 1e6)
         total_reads = num_phases*reads_per_phase
-        read_freq = 1/(self.sync_time*2)*1e6
+        
         beam_time = self.integration_time / 1000
         arduino_period = round(1/readout_rate*1e6)
 
@@ -307,17 +308,7 @@ chop_freq  : 1/(2*sync_time)""")
         self.arduino.set_frames(reads_per_phase)
         self.arduino.set_n_blanks(num_phases)
         self.arduino.set_n_delays(0)  # I don't know what this is...
-
-        if self.use_chopper:
-            self.switchbox.set_labchop()
-            print("switch box set to lab")
-            self.chopper.setup_chopper(read_freq,
-                                       beam_time + 3)
-            print("chopper set up complete")
-        else:
-            self.chopper.open_chopper()
-            self.switchbox.set_apex()
-
+        self._configure_chopper()
         self.syncbox.use_dv()
         print("sync box dv on")
         self.mce.write("cc", "use_sync", 2)
@@ -328,6 +319,36 @@ chop_freq  : 1/(2*sync_time)""")
         self.reads_per_phase = round(reads_per_phase)
         print("We Are Configured!")
         self.apecs_callback(self.apecs_socket,self.apecs_address,"APEX:ZEUS2BE:","configure")
+    
+    def _configure_chopper(self):
+        read_freq = 1/(self.sync_time*2)*1e6
+        beam_time = self.integration_time/1000
+        if self.use_chopper:
+            self.switchbox.set_labchop()
+            print("switch box set to lab")
+            self.chopper.setup_chopper(read_freq,
+                                       beam_time + 3)
+            print("chopper set up complete")
+        else:
+            self.chopper.open_chopper()
+            print("chopper open")
+            self.switchbox.set_apex()
+            print("switch box set to apex")
+
+    def _configure_total_power(self):
+        self._configure_chopper()
+        self.syncbox.free_run()
+        self.syncbox.stop()
+        print("sync box in free run mode")
+        self.mce.write("cc", "use_sync", 2)
+        self.mce.write("cc", "use_dv", 2)
+        self.mce.write("cc", "select_clk", 1)
+        print("mce in sync mode")
+        #no arduino, all syncing done by sync box
+        readout_rate = float(self.mce.readout_rate()[0])
+        # for now. In the future we could modify sync box data rate...
+        self.n_frames=round(self.integration_time/1000*readout_rate)
+
 
 def make_filename(filename):
     if "{num}" in filename:

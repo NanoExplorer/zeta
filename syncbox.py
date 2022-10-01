@@ -9,7 +9,11 @@ class Syncbox:
         self.numrows = 33
         self.rowlen = 50
         self.mode = 'rt'
-        self.data_rate = 1000
+        # arz_freq = 33*50*25MHz according to mce wiki
+        # that doesn't make sense so I'm assuming it's 25MHz/(33*50)
+        # That gives us a data rate of 38=398.72 Hz readout
+        # which is the same as what shows up in the zalpha calculator
+        self.data_rate = 38
         self.set_num_rows(self.numrows)
         self.set_row_len(self.rowlen)
 
@@ -30,10 +34,9 @@ class Syncbox:
         self.com.write("rt\r\n".encode())
         self.mode = 'rt'
 
-    def free_run(self, data_rate=1000):
+    def free_run(self, data_rate=38):
         # In this mode the sync box is constantly commanding the 
-        # MCE to take data. I have not quite figured out the 
-        # data_rate parameter.
+        # MCE to take data. Data rate 38 corresponds to 398.72 Hz frames
         self.com.write(f"fr {data_rate}\r\n".encode())
         self.mode = 'fr'
         self.data_rate = data_rate

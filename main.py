@@ -99,7 +99,6 @@ class ApecsListener():
             self.zeus.configure_grating(int(self.operating_parameters["gratingindex"]))
         elif command == "start":
             self.run()
-            return
         elif command == "stop":
             self.stop()
         elif command == "abort":

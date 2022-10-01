@@ -59,8 +59,8 @@ if __name__ == "__main__":
                 det_array = np.std(cube, axis=2)
             
             print(cube[am.phys_to_mce(30,0,400)])
-            cube[:,:,chop==1] = zt.nd_reject_outliers(cube[:,:,chop==1],MAD_chop=20)
-            cube[:,:,chop==0] = zt.nd_reject_outliers(cube[:,:,chop==0],MAD_chop=20)
+            cube[:,:,chop==1] = zt.nd_reject_outliers(cube[:,:,chop==1],MAD_chop=10)
+            cube[:,:,chop==0] = zt.nd_reject_outliers(cube[:,:,chop==0],MAD_chop=10)
             print(cube[am.phys_to_mce(30,0,400)])
             cube.fill_value=np.nan
             iplot = zt.plotting.ZeusInteractivePlotter(det_array,cube)
