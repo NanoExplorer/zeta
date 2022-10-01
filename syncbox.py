@@ -45,7 +45,7 @@ class Syncbox:
         self.com.write("go\r\n".encode())
 
     def stop(self):
-        self.com.write("stop\r\n".encode())
+        self.com.write("st\r\n".encode())
 
     def reset(self):
         self.com.write("re\r\n".encode())
