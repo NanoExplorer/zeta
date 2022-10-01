@@ -356,6 +356,7 @@ chop_freq  : 1/(2*sync_time)""")
         # for now. In the future we could modify sync box data rate...
         self.n_frames=round(self.integration_time/1000*readout_rate)
         self.use_dv = False
+        self.apecs_callback(self.apecs_socket,self.apecs_address,"APEX:ZEUS2BE:","configure")
 
 
 def make_filename(filename):
