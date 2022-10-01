@@ -90,11 +90,10 @@ class ApecsListener():
 
     def execute(self, command):
         response = command
-        with self.zeus.hardware_lock:
-            self.zeus.apecs_address = self.apecs_address
         if command == "configure":
+            self.zeus.apecs_address = self.apecs_address
             self.do_configuration()
-            return
+            return # configuration may take a sec, so it will tell apecs when it's done
         elif command == "gratinggo":
             self.zeus.configure_grating(int(self.operating_parameters["gratingindex"]))
         elif command == "start":
