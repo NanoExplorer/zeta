@@ -45,7 +45,7 @@ class ZeusHardwareManager(threading.Thread):
         self.integration_time = 0  # ms time mce_run should integrate for
         self.sync_time = 0  # us; time for one chopper phase = 1/2f
         self.blank_time = 0  # us; time for the wobbler to move.
-        self.do_sync = True
+        self.use_dv = True
         self.n_frames = 0
         self.filename = ""
         self.reads_per_phase = 0
@@ -78,14 +78,14 @@ class ZeusHardwareManager(threading.Thread):
            self.sync_time == sync_time and \
            self.blank_time == blank_time and \
            self.use_chopper == use_chopper and\
-           self.do_sync:
+           self.use_dv:
             self.apecs_callback(self.apecs_socket,self.apecs_address,"APEX:ZEUS2BE:","configure")
         else:
             self.integration_time = integration_time
             self.sync_time = sync_time
             self.blank_time = blank_time
             self.use_chopper = use_chopper
-            self.do_sync = True
+            self.use_dv = True
             self.q.put("configure")
             self.mce_error = False
         self.beams_since_last_configure=0
@@ -137,13 +137,17 @@ class ZeusHardwareManager(threading.Thread):
         f = make_filename(self.filename)
         print(f"Acquiring data into file: {f}.")
 
+        # start watching the clock card for time stamps
+        # to write into .ts file. We are always using
+        # the sync box from now on!
+        zframetimes = self._open_frametimes(f)
+
         if self.use_chopper:
             self.chopper.run_chopper()
-        if self.do_sync:
+        if self.use_dv:
             self.syncbox.go()
-            # start watching the clock card for time stamps
-            # to write into .ts file 
-            zframetimes = self._open_frametimes(f)
+
+            
         #self.apecs_callback(self.apecs_socket,self.apecs_address,"APEX:ZEUS2BE:","start")
         #start mce_run
         mce_run = self._mce_run(f)
@@ -154,11 +158,14 @@ class ZeusHardwareManager(threading.Thread):
             outs = mce_run.stdout.readline()
             text = outs.decode()
             print(text.strip())
-        if self.do_sync:
+        if self.use_dv:
             self.arduino.go()  # if the arduino starts generating pulses
             # before the MCE actually starts taking data, the MCE will not
             # get the correct number of pulses and will hang.
             print("Arduino is go!")
+        else:
+            self.syncbox.go()
+            print("Started syncbox freerun!")
         print("waiting for mce_run to finish acquiring...")
         
         try:
@@ -178,9 +185,11 @@ class ZeusHardwareManager(threading.Thread):
         if self.use_chopper:
             self.chopper.stop()
             self.chopper.open_chopper()
-        if self.do_sync:
-            zframetimes.wait()
-            self._make_chop_file(f)
+        if not self.use_dv:
+            self.syncbox.stop()
+        zframetimes.wait()
+        self._make_chop_file(f)
+
         self._make_hk_file(f)
         print(f"finished acquiring data file {f}.")
         self.beams_since_last_configure += 1
@@ -212,7 +221,7 @@ gratingindex : {self.grating.idx}
 chopper_pos  : {chop_state}
 blanksw_pos  : {self.switchbox.state}
 # ---- MCE config --- 
-sync_acq      : {self.do_sync}
+sync_acq      : {self.use_dv}
 row_len       : 100
 num_rows      : 33
 row_dly       : 4
@@ -239,7 +248,6 @@ wavelength : 0.00
 at_pixel   : None
 chop_freq  : 1/(2*sync_time)""")
 
-
     def _mce_run(self, filename):
         mcer = subprocess.Popen([
             "/usr/mce/mce_script/script/mce_run",
@@ -264,11 +272,9 @@ chop_freq  : 1/(2*sync_time)""")
             stdout=subprocess.PIPE
         )
         print(a.communicate()[0].decode())
-        if self.do_sync:
-            
-            self.mce.write("cc", "use_sync", 2)
-            self.mce.write("cc", "use_dv", 2)
-            self.mce.write("cc", "select_clk", 1)
+        self.mce.write("cc", "use_sync", 2)
+        self.mce.write("cc", "use_dv", 2)
+        self.mce.write("cc", "select_clk", 1)
 
     def _open_frametimes(self,filename):
         print("opening zframetimes...")
@@ -310,6 +316,7 @@ chop_freq  : 1/(2*sync_time)""")
         self.arduino.set_n_delays(0)  # I don't know what this is...
         self._configure_chopper()
         self.syncbox.use_dv()
+        self.syncbox.go()
         print("sync box dv on")
         self.mce.write("cc", "use_sync", 2)
         self.mce.write("cc", "use_dv", 2)
@@ -348,6 +355,7 @@ chop_freq  : 1/(2*sync_time)""")
         readout_rate = float(self.mce.readout_rate()[0])
         # for now. In the future we could modify sync box data rate...
         self.n_frames=round(self.integration_time/1000*readout_rate)
+        self.use_dv = False
 
 
 def make_filename(filename):
