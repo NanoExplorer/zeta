@@ -254,7 +254,7 @@ chop_freq  : 1/(2*sync_time)""")
             filename,
             str(self.n_frames),
             "s",
-            f"--timeout={self.sync_time//500}"],
+            f"--timeout={min(1000,self.sync_time//500)}"],
             stdout = subprocess.PIPE
         )
         return mcer
