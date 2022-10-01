@@ -292,7 +292,7 @@ chop_freq  : 1/(2*sync_time)""")
     def _configure_hw_sync(self):
         print("Got configure")
         if self.blank_time==0:
-            return self._configure_total_power(self)
+            return self._configure_total_power()
         on_time_per_phase = self.sync_time - self.blank_time  # us
         num_phases = round(self.integration_time * 1000 / self.sync_time)
         readout_rate = float(self.mce.readout_rate()[0])
