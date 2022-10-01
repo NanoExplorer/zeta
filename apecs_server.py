@@ -98,7 +98,6 @@ def keep_reading_file(data_file, mce_px, callback):
             z2addr = ("localhost",16255)
             comm.sendto("APEX:ZEUS2BE:IntegrationTime?".encode(), z2addr)
             inttime = int(comm.recvfrom(1024)[0].decode().split(" ")[1])/10
-
     except:
         print("failed to get inttime from zeus2be, falling back to guesstimate...")
         mcedata = mce_data.SmallMCEFile(data_file)
@@ -115,9 +114,6 @@ def keep_reading_file(data_file, mce_px, callback):
             # the frames... The old way used to hang because it couldn't tell
             # that the file was done being written. This way we will at least
             # stop before the next APECS command.
-            #
-            # Crap, this doesn't take into account blank time.
-            #...
             d, chop, ts = read_as_much_as_possible(data_file)
             #print(d[1,1])
             chunked_ts, chunked_chop = numba_reduction.chunk_data_1d(chop, ts)
