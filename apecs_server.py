@@ -68,7 +68,7 @@ def read_as_much_as_possible(data_file):
     #print(cube.shape)
     #print(frames_ready)
     d = numba_reduction.offset_data_reduction(chop, cube)
-    return d, chop, ts, frames_ready
+    return d, chop, ts
 
 
 def get_struct(ts, itime, chop, data, i):
@@ -91,15 +91,34 @@ def get_struct(ts, itime, chop, data, i):
 
 
 def keep_reading_file(data_file, mce_px, callback):
-    mcedata = mce_data.SmallMCEFile(data_file)
-    nframes = int(mcedata.runfile.data["FRAMEACQ"]["DATA_FRAMECOUNT"].strip())
+    start_time = time.time()
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as comm:
+            comm.settimeout(1)
+            z2addr = ("localhost",16255)
+            comm.sendto("APEX:ZEUS2BE:IntegrationTime?".encode(), z2addr)
+            inttime = int(comm.recvfrom(1024)[0].decode().split(" ")[1])/10
 
-    frames_sent = 0
+    except:
+        print("failed to get inttime from zeus2be, falling back to guesstimate...")
+        mcedata = mce_data.SmallMCEFile(data_file)
+        nframes = int(mcedata.runfile.data["FRAMEACQ"]["DATA_FRAMECOUNT"].strip())
+        row_len = int(mcedata.runfile.data["HEADER"]["RB cc row_len"].strip())
+        n_rows = int(mcedata.runfile.data["HEADER"]["RB cc num_rows"].strip())
+        data_rate = int(mcedata.runfile.data["HEADER"]["RB cc data_rate"].strip())
+        inttime = nframes/(50e6/row_len/data_rate/n_rows)*1.25  # a reasonable guess at least
+
     lines_sent = 0
     with open(data_file+".pf", 'w') as pf:
-        while frames_sent < nframes-5:
-            print(frames_sent)
-            d, chop, ts, frames_ready = read_as_much_as_possible(data_file)
+        while time.time() < start_time+inttime+1:  # This is more accurate than
+            # counting frames because sometimes the MCE doesn't get all
+            # the frames... The old way used to hang because it couldn't tell
+            # that the file was done being written. This way we will at least
+            # stop before the next APECS command.
+            #
+            # Crap, this doesn't take into account blank time.
+            #...
+            d, chop, ts = read_as_much_as_possible(data_file)
             #print(d[1,1])
             chunked_ts, chunked_chop = numba_reduction.chunk_data_1d(chop, ts)
             ts_for_apex = numba_reduction.reduce_chunks_1d(chunked_ts)
@@ -127,8 +146,7 @@ def keep_reading_file(data_file, mce_px, callback):
                 )
                 pf.write(pfstring+'\n')
                 callback(encoded_frame)
-                lines_sent += 1
-            frames_sent = frames_ready   
+                lines_sent += 1  
             time.sleep(0.5)
 
 
