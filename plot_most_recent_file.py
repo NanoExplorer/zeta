@@ -64,8 +64,7 @@ if __name__ == "__main__":
             cube[:,:,chop==0] = zt.nd_reject_outliers(cube[:,:,chop==0],MAD_chop=10)
             print(cube[am.phys_to_mce(30,0,400)])
             cube.fill_value=np.nan
-            iplot = zt.plotting.ZeusInteractivePlotter(det_array,cube)
-            iplot.ts = ts
+            iplot = zt.plotting.ZeusInteractivePlotter(det_array,cube,ts=ts)
         if last_iplot is not None:
             #print(np.ma.array(det_array))
             # iplot.data = np.ma.array(det_array)
