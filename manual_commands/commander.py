@@ -20,6 +20,7 @@ def main():
     sc.add_argument('--duration', widget="IntegerField", help="skychop duration in seconds",default=6)
     sc.add_argument('--efficiency', widget="DecimalField", help="skychop efficiency fraction",default=0.5)
     sc.add_argument('--frequency', widget="DecimalField", help="skychop chopper frequency in Hz",default=0.5)
+    
 
     bs = sp.add_parser("Biasstep",help="run bias steps")
     bs.add_argument('--step-size', widget="IntegerField", help="bias step depth in DAC units",default = 20)
@@ -34,6 +35,7 @@ def main():
         print(f"sending grating to {args.index}")
         s.sendto("APEX:ZEUS2BE:GratingIndex {args.index}".encode(), addr)
         s.sendto("APEX:ZEUS2BE:GratingGo".encode(), addr)
+        time.sleep(2)
     elif args.sp=="Skychop":
         synctime = int(1/args.frequency/2*1e6)
         blanktime = int(synctime*(1/args.efficiency))

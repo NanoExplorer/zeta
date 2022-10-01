@@ -29,6 +29,7 @@ class Grating(motors.Motor):
             return
         elif idx_now > index:
             self.go_to_index(index+1)
+            self.wait_for_motor()
         else:
             self.go_to_index(index+71)
             self.wait_for_motor()

@@ -5,6 +5,14 @@ import hardware
 import threading
 from queue import Queue, Empty
 
+def respond(sock, addr, context, value):
+    time_utc = datetime.utcnow()
+    time_tai = leapseconds.utc_to_tai(time_utc)
+    time_iso = time_tai.isoformat()
+    response = f"{context}{value} {time_iso}"
+    print(f"Sending APECS: {response}")
+    sock.sendto(response.encode(), addr)
+
 class ApecsListener():
     #This controls everything
     def __init__(self):
@@ -39,7 +47,7 @@ class ApecsListener():
         self.zeus.start()
         self.obsengine.start()
         self.obsengine.query_apecs_scan_num()
-        self.zeus.apecs_callback=self.respond
+        self.zeus.apecs_callback=respond
         while self.keep_going: 
             message, address = self.apecs_socket.recvfrom(1024)
             self.apecs_address = address
@@ -62,7 +70,7 @@ class ApecsListener():
             return_val = self.execute(relevant_info.lower())
             return # execute does its own response
 
-        self.respond(f"{parts[0]}:{parts[1]}:", return_val)
+        respond(self.apecs_socket,self.apecs_address,f"{parts[0]}:{parts[1]}:", return_val)
 
     def set_parameter(self, message):
         param, value = message.split(' ')
@@ -80,16 +88,10 @@ class ApecsListener():
             value = "ERROR NOT_IMPLEMENTED"
         return f"{param} {value}"
 
-    def respond(self, context, value):
-        time_utc = datetime.utcnow()
-        time_tai = leapseconds.utc_to_tai(time_utc)
-        time_iso = time_tai.isoformat()
-        response = f"{context}{value} {time_iso}"
-        print(f"Sending APECS: {response}")
-        self.apecs_socket.sendto(response.encode(), self.apecs_address)
-
     def execute(self, command):
         response = command
+        with self.zeus.hardware_lock:
+            self.zeus.apecs_address = self.apecs_address
         if command == "configure":
             self.do_configuration()
             return
@@ -106,7 +108,7 @@ class ApecsListener():
             self.zeus.auto_setup()
         else:
             response = response + " ERROR NOT_IMPLEMENTED"
-        self.respond("APEX:ZEUS2BE:", response)
+        respond(self.apecs_socket,self.apecs_address,"APEX:ZEUS2BE:", response)
 
     def do_configuration(self):
         op = self.operating_parameters
