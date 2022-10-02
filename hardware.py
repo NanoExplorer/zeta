@@ -13,22 +13,28 @@ import socket
 
 
 class ZeusHardwareManager(threading.Thread):
-    """ High level interface for all the hardware interfaces for ZEUS-2.
+    """ High level interface for all the hardware interfaces for ZEUS-2. 
+    Contains object representations of every individual subsystem that supports
+    ZEUS-2, including the syncbox, vlinx, motors, MCE, etc.
+
     This is a Thread, so you have to be a little bit careful with it.
     It is recommended not to access any member variables or call any methods
     that begin with underscore ("_"). Instead, the methods that do not
     start with an underscore provide all of the functionality that should
     be needed.
 
-    If you decide to break these rules, acquier the hardware_lock while doing so.
+    If you decide to break these rules, acquire the hardware_lock while doing so.
      """
     def __init__(self):
         threading.Thread.__init__(self)
         self.hardware_lock = threading.Lock()
         # acquire this lock if you want to talk to the hardware!
         # it's not recommended, but you can do it.
-        self.apecs_callback=None
+        self.apecs_callback = None  # Configure takes a while, so we respond
+        # from this thread when we're done instead of immediately responding
+        # from the main thread.
         self.apecs_address = None
+
         # Hardware objects
         self.arduino = None
         self.chopper = None
@@ -37,23 +43,27 @@ class ZeusHardwareManager(threading.Thread):
         self.grating = None
         self.mce = None
         self.mce_error = False
-        # Control queue
+
+        # Control queue. This is mostly used from methods in this class that can
+        # be called from other threads. Technically though queues are thread safe
+        # so you could add stuff to it yourself if you're feeling adventurous.
         self.q = Queue()
 
-        # Acquisition parameters
+        # Acquisition parameters. 
         self.use_chopper = False
         self.integration_time = 0  # ms time mce_run should integrate for
         self.sync_time = 0  # us; time for one chopper phase = 1/2f
         self.blank_time = 0  # us; time for the wobbler to move.
-        self.use_dv = True
+        self.use_dv = True  # Basically whether we want to use the arduino
         self.n_frames = 0
         self.filename = ""
         self.reads_per_phase = 0
         self.beams_since_last_configure = 0
-        self.want_grating_index = 0
+        self.want_grating_index = 0  # Note: this MAY not equal the actual grating index!
         self.keep_going = True
 
     def configure_grating(self,idx):
+        """ Tell the hardware thread you want the grating to move!"""
         if self.grating.idx == idx:
             return
         else:
@@ -73,6 +83,8 @@ class ZeusHardwareManager(threading.Thread):
 
         todo: provide calculator from chopper params to apecs-like params
         """
+
+        # we can skip configure if we're already configured the same way
         if not self.mce_error and\
            self.integration_time == integration_time and \
            self.sync_time == sync_time and \
@@ -91,13 +103,23 @@ class ZeusHardwareManager(threading.Thread):
         self.beams_since_last_configure=0
 
     def take_data(self, filename):
+        """ Command the system to start taking data! Acquire data into the provided
+        filename. If the filename contains the string "{num}" we will automatically
+        assign an index to it based on currently existing files"""
         self.filename = filename
         self.q.put("run")
 
     def auto_setup(self):
+        """ Command the MCE to run an auto setup. """
         self.q.put("auto_setup")
 
     def run(self):
+        """ This is the main method, called by the Thread. Don't call it 
+        directly, instead use Hardware.start()
+        """
+
+        # Get objects for all our different boxes, and make a socket for APECS
+        # communication 
         print("Setting Up Equipment!")
         self.apecs_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.arduino = syncuino.Syncuino()
@@ -106,7 +128,8 @@ class ZeusHardwareManager(threading.Thread):
         self.chopper = chopper.Chopper()
         self.grating = grating.Grating()
         self.switchbox = switchbox.Switchbox()
-        print("Done! Listening for APECS commands.")
+        print("Done! Listening for APECS commands.") # Though technically 
+        # this thread isn't doing the APECS listening...
         while self.keep_going:
             try:
                 cmd = self.q.get(True, 30)
@@ -132,6 +155,11 @@ class ZeusHardwareManager(threading.Thread):
                 print(self.mce_crash_reset().communicate())
 
     def _take_data(self):
+        """ Don't call this without the hardware lock! Or, don't call it at all
+        if you can avoid it.
+
+        Actually sets up the data acquisition, and blocks until data is fully 
+        acquired. """
         # make sure we don't overwrite anything
         print("Got GO command! taking data!")
         f = make_filename(self.filename)
@@ -147,7 +175,6 @@ class ZeusHardwareManager(threading.Thread):
         if self.use_dv:
             self.syncbox.go()
 
-            
         #self.apecs_callback(self.apecs_socket,self.apecs_address,"APEX:ZEUS2BE:","start")
         #start mce_run
         mce_run = self._mce_run(f)
@@ -164,15 +191,18 @@ class ZeusHardwareManager(threading.Thread):
             # get the correct number of pulses and will hang.
             print("Arduino is go!")
         else:
-            self.syncbox.go()
+            self.syncbox.go() # If the Syncbox starts generating DV pulses
+            # before the MCE is ready, the .ts file will be off by however many
+            # pulses the MCE missed.
             print("Started syncbox freerun!")
+
         print("waiting for mce_run to finish acquiring...")
         
         try:
             output = mce_run.communicate(timeout=self.integration_time/1000 + 2)
             print(output)  # will probably print nothing
-        # because usually "acq_go" is the last thing it says
-        # But it does print if there are errors
+            # because usually "acq_go" is the last thing it says
+            # But it does print if there are errors
             if "error" in output[0].decode():
                 print("MCE error! will need to reset mce!")
                 self.mce_error = True
@@ -194,23 +224,27 @@ class ZeusHardwareManager(threading.Thread):
         print(f"finished acquiring data file {f}.")
         self.beams_since_last_configure += 1
 
-    def _make_chop_file(self,filename):
+    def _make_chop_file(self, filename):
+        """ Open a subprocess for Justin's chop file generator"""
         c = subprocess.Popen([
             "/usr/local/bin/mcechopfile",
             f"/data/cryo/current_data/{filename}"
         ])
         c.wait()
 
-    def _make_hk_file(self,filename):
+    def _make_hk_file(self, filename):
+        """ Generate a .hk file, following the same format as the old 
+        softwre"""
         # I apologize from the bottom of my heart 
-        # for this implementation.
+        # for this implementation. It works but is ugly
+        # It's clear and easy to write though?
         with open(f"/data/cryo/current_data/{filename}.hk", 'w') as hkfile:
             if self.use_chopper:
-                chop_state="running"
+                chop_state = "running"
             elif self.chopper.open:
-                chop_state="open"
+                chop_state = "open"
             else:
-                chop_state="closed"
+                chop_state = "closed"
             hkfile.write(f"""#ZEUS-2 hk
 MCE_cmd  : see runfile
 acq_mode : None
@@ -249,6 +283,8 @@ at_pixel   : None
 chop_freq  : 1/(2*sync_time)""")
 
     def _mce_run(self, filename):
+        """ Open a subprocess for mce_run! Returns the Popen object
+        so you can talk to it"""
         mcer = subprocess.Popen([
             "/usr/mce/mce_script/script/mce_run",
             filename,
@@ -260,13 +296,18 @@ chop_freq  : 1/(2*sync_time)""")
         return mcer
 
     def mce_crash_reset(self):
+        """ Attempts to crash-reset the MCE """
         mcer = subprocess.Popen([
             "/home/mce/.local/bin/mce_auto_crash_reset"],
             stdout = subprocess.PIPE
         )
+        print(mcer.communicate()[0].decode())
         return mcer
 
     def _auto_setup(self):
+        """ Runs an auto setup and then sets the clock card back
+        into sync mode because I haven't bothered to put those
+        details into experiment.cfg"""
         a = subprocess.Popen([
             "auto_setup"],
             stdout=subprocess.PIPE
@@ -277,6 +318,9 @@ chop_freq  : 1/(2*sync_time)""")
         self.mce.write("cc", "select_clk", 1)
 
     def _open_frametimes(self,filename):
+        """ Opens a subprocess for Justin's Zframetimes program,
+        which uses the Meinberg clock card driver to record the exact
+        time at which each MCE frame was acquired"""
         print("opening zframetimes...")
         filename = f"/data/cryo/current_data/{filename}"
         zf = subprocess.Popen([
@@ -290,6 +334,13 @@ chop_freq  : 1/(2*sync_time)""")
         return zf
 
     def _configure_hw_sync(self):
+        """ Configures the hardware based on the parameters which have
+        been set by the other configure_sync() function! This can take a minute,
+        so it only responds to APECS when it's finished.
+    
+        Currently this program only runs in sync mode, even total power data
+        is now collected with the sync box on! Just set blank time to 0.
+        """
         print("Got configure")
         if self.blank_time==0:
             return self._configure_total_power()
@@ -314,20 +365,29 @@ chop_freq  : 1/(2*sync_time)""")
         self.arduino.set_frames(reads_per_phase)
         self.arduino.set_n_blanks(num_phases)
         self.arduino.set_n_delays(0)  # I don't know what this is...
+
         self._configure_chopper()
+
         self.syncbox.use_dv()
         self.syncbox.go()
         print("sync box dv on")
+
         self.mce.write("cc", "use_sync", 2)
         self.mce.write("cc", "use_dv", 2)
         self.mce.write("cc", "select_clk", 1)
         print("mce in sync mode")
+
         self.n_frames = round(total_reads)
         self.reads_per_phase = round(reads_per_phase)
         print("We Are Configured!")
+
         self.apecs_callback(self.apecs_socket,self.apecs_address,"APEX:ZEUS2BE:","configure")
     
     def _configure_chopper(self):
+        """ Sets up the chopper's motor controller with the correct parameters.
+        OR, opens the chopper if you are not collecting chopped data.
+        TODO: provide closed-chopper acquisition option.
+        """
         read_freq = 1/(self.sync_time*2)*1e6
         beam_time = self.integration_time/1000
         if self.use_chopper:
@@ -343,14 +403,16 @@ chop_freq  : 1/(2*sync_time)""")
             print("switch box set to apex")
 
     def _configure_total_power(self):
+        """ Configures the sync box to constantly output DV pulses
+        so that we can take an uninterrupted stream of data"""
         self._configure_chopper()
         self.syncbox.free_run()
-        self.syncbox.stop()
+        self.syncbox.stop()  # We don't want any DV pulses until MCE_Run has started
         print("sync box in free run mode")
         self.mce.write("cc", "use_sync", 2)
         self.mce.write("cc", "use_dv", 2)
         self.mce.write("cc", "select_clk", 1)
-        print("mce in sync mode")
+        print("mce in sync mode") 
         #no arduino, all syncing done by sync box
         readout_rate = float(self.mce.readout_rate()[0])
         # for now. In the future we could modify sync box data rate...
@@ -360,6 +422,12 @@ chop_freq  : 1/(2*sync_time)""")
 
 
 def make_filename(filename):
+    """ Searches the filesystem for files that are like the one provided in filename
+    and returns a filename that you can use without overwriting something.
+
+    Only works if the filename contains reserved space for a numerical index in the
+    form "{num}"
+    """
     if "{num}" in filename:
         path = "/data/cryo/current_data/" 
         files = glob(path + filename.format(num="????"))

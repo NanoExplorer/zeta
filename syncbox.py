@@ -4,6 +4,9 @@ SYNC_BOX_COM = "/dev/ttyS5"
 
 
 class Syncbox:
+    """ Communication interface for the MCE sync box! 
+    Connects to the sync box over serial and lets you easily
+    access common functions"""
     def __init__(self):
         self.com = serial.Serial(port=SYNC_BOX_COM, timeout=1)
         self.numrows = 33
@@ -21,10 +24,14 @@ class Syncbox:
         self.com.close()
 
     def set_num_rows(self, numrows):
+        """ Probably won't need this function unless you want to do 
+        crazy rectangle mode stuff synchronously..."""
         self.com.write(f"nr {numrows}\r\n".encode())
         self.numrows = numrows
 
     def set_row_len(self, rowlen):
+        """ Probably won't need this function unless you want to do 
+        crazy rectangle mode stuff synchronously..."""
         self.com.write(f"rl {rowlen}\r\n".encode())
         self.rowlen = rowlen
 
@@ -42,6 +49,7 @@ class Syncbox:
         self.data_rate = data_rate
 
     def go(self):
+        """ Start generating DV pulses/listening for the Arduino"""
         self.com.write("go\r\n".encode())
 
     def stop(self):

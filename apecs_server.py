@@ -21,7 +21,13 @@ APECS_FRAME_STRUCTURE = struct.Struct('<8s I 8s 28s I I I I I I f')
 # then 4 integers ==1
 # and then the data as a float.
 
+
 def get_recent_file():
+    """ Tries to find the file that is currently being written.
+    This is accomplished by first filtering for files that have been modified
+    recently and then checking the .ts file for a timestamp that was collected
+    within one second of this function's initial call.
+    """
     connection_time = datetime.datetime.utcnow()
     conn_time_gps = leapseconds.utc_to_gps(connection_time)
     conn_timestamp_gps = conn_time_gps.replace(tzinfo=datetime.timezone.utc).timestamp()
@@ -53,6 +59,9 @@ def get_recent_file():
 
 
 def read_as_much_as_possible(data_file):
+    """ Reads all the data that's currently available. Makes sure
+    that the shapes all match before returning.
+    Also, processes the data with our offset_data_reduction algorithm"""
     ts = np.genfromtxt(data_file+'.ts', invalid_raise=False)[:, 1]
     frames_ready = len(ts)
     mcedata = mce_data.SmallMCEFile(data_file)
@@ -72,6 +81,9 @@ def read_as_much_as_possible(data_file):
 
 
 def get_struct(ts, itime, chop, data, i):
+    """ Given timestamp, integration, chopper phase, data value, and index (since
+    most of those values are provided as arrays), construct a struct that can be
+    sent to the APEX data system. Returns that and a string representation of it,"""
     ts_datetime = datetime.datetime.utcfromtimestamp(ts[i])
     timestamp = ts_datetime.isoformat()[:24]+"GPS "
     itimeus = int(itime[i]*1e6)
@@ -91,6 +103,14 @@ def get_struct(ts, itime, chop, data, i):
 
 
 def keep_reading_file(data_file, mce_px, callback):
+    """ Starts reading a file and continues reading it until data has finished
+    being collected into it.
+    :param data_file: filename to read from
+    :param mce_px: list of pixels (in MCE format) to average and send
+    :param callback: function to call with the binary encoded data to send
+    """ 
+
+    #First we set a timeout after which we stop reading the file
     start_time = time.time()
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as comm:
@@ -107,6 +127,8 @@ def keep_reading_file(data_file, mce_px, callback):
         data_rate = int(mcedata.runfile.data["HEADER"]["RB cc data_rate"].strip())
         inttime = nframes/(50e6/row_len/data_rate/n_rows)*1.25  # a reasonable guess at least
 
+    # Then we continuously attempt to read as much as we can until the time
+    # expires. Send data as complete chunks are acquired.
     lines_sent = 0
     with open(data_file+".pf", 'w') as pf:
         while time.time() < start_time+inttime+1:  # This is more accurate than
@@ -147,6 +169,8 @@ def keep_reading_file(data_file, mce_px, callback):
 
 
 class ApecsRequestHandler(socketserver.BaseRequestHandler):
+    """ This "socket server" listenes for connections from the APEX data system
+    and responds by using the above functions to supply data as it comes in"""
     def handle(self):
         try:
             print("Apex data connected!")
@@ -171,11 +195,12 @@ class ApecsRequestHandler(socketserver.BaseRequestHandler):
 
 
 class NonBlockingTCPServer(socketserver.TCPServer):
+    """ This allows us to avoid most of the "ERROR PORT ALREADY IN USE" nonsense"""
     def server_bind(self):
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.socket.bind(self.server_address)
 
 
 if __name__ == "__main__":
-    with NonBlockingTCPServer(('0.0.0.0',25144),ApecsRequestHandler) as server:
+    with NonBlockingTCPServer(('0.0.0.0', 25144), ApecsRequestHandler) as server:
         server.serve_forever()

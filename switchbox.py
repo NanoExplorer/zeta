@@ -5,6 +5,9 @@ SWITCH_BOX_PORT = 4000
 
 
 class Switchbox(Vlinx):
+    """ The switch box does exactly one thing: it chooses whether our 
+    sync/blank signal comes from APEX or from the chopper wheel. It is on a 
+    vlinx though, so we have to deal with that."""
     def __init__(self):
         super().__init__(SWITCH_BOX_IP, SWITCH_BOX_PORT)
         self.state = self.get_state()
