@@ -4,6 +4,8 @@ import time
 VERBOSE = True
 
 class Vlinx:
+    """ Provides a basic and hopefully extensible basis for 
+    communicating with devices via Vlinx Serial Servers"""
     def __init__(self,address,port):
         self.address = address
         self.port = port
@@ -14,6 +16,8 @@ class Vlinx:
         self.socket.close()
 
     def send(self, message):
+        """ Send a message to the Vlinx. You need to make sure it has
+        everything it needs, including line endings!"""
         # print(f"sending message {message}")
         if VERBOSE:
             print(f"vlinx sending {repr(message)} to {self.address}")
@@ -34,6 +38,7 @@ class Vlinx:
         return data.strip()
 
     def flush(self):
+        """ Gets rid of any data that may be sitting around in the pipeline..."""
         try:
             self.socket.settimeout(0.1)
             self.socket.recv(4096)

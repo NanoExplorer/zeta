@@ -7,12 +7,14 @@ class MotorError(Exception):
 
 
 class Motor(Vlinx):
-    def __init__(self, address, port, motor_number):
-        """ API for interfacing with ZEUS-2 motorbox 
-        ZEUS-2 motorbox uses a vlinx serial-to-tcp server
-        for communication.
+    """ API for interfacing with ZEUS-2 motorbox.
+    The ZEUS-2 motorbox uses a vlinx serial-to-tcp server
+    for communication, so we extend the Vlinx class to have access to
+    basic Vlinx functionality. """
 
-        :param address: address of motor box vlinx. This can 
+    def __init__(self, address, port, motor_number):
+
+        """:param address: address of motor box vlinx. This can 
             be a DNS-resolvable hostname like zeus2motorbox.apex-telescope.org
             or it can be an IP address.
         :param port: Port the vlinx is listening on. Usually 4000.
@@ -26,6 +28,7 @@ class Motor(Vlinx):
         The object returned will be able to control the motor box
         and provides helpful methods for accomplishing that.
         """
+
         self.motor = motor_number
         super().__init__(address, port)
 
@@ -50,6 +53,8 @@ class Motor(Vlinx):
         self.send_command("G")
 
     def disable_motor(self):
+        """ Power the motor off. This prevents it from holding in place so
+        be careful! """
         self.send_command("O1")
 
     def get_current_index(self):
